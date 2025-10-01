@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Real-Time Chat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Login Screen */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .login-box {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            min-width: 320px;
+        }
+
+        .login-box h1 {
+            margin-bottom: 1.5rem;
+            color: #333;
+            font-size: 1.8rem;
+        }
+
+        .login-box input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 1rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .login-box input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .login-box button:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Chat Interface */
+        .chat-container {
+            display: none;
+            height: 100vh;
+            background: white;
+            flex-direction: row;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: #2c3e50;
+            color: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 1rem;
+            background: #34495e;
+            border-bottom: 1px solid #3d566e;
+        }
+
+        .sidebar-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .users-list {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .user-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0;
+            color: #bdc3c7;
+            font-size: 0.9rem;
+        }
+
+        .user-item.current-user {
+            color: #3498db;
+            font-weight: 600;
+        }
+
+        .user-status {
+            width: 8px;
+            height: 8px;
+            background: #27ae60;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .main-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            background: #34495e;
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .user-info {
+            font-size: 0.9rem;
+            color: #bdc3c7;
+        }
+
+        .messages-container {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .system-message {
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+            font-size: 0.9rem;
+            padding: 0.5rem;
+        }
+
+        .text-message, .file-message {
+            background: white;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            max-width: 70%;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .username {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.9rem;
+        }
+
+        .timestamp {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+        }
+
+        .message-text {
+            color: #2c3e50;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px dashed #dee2e6;
+        }
+
+        .file-icon {
+            font-size: 1.5rem;
+            margin-right: 0.75rem;
+        }
+
+        .file-details {
+            flex: 1;
+        }
+
+        .file-link {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .file-link:hover {
+            text-decoration: underline;
+        }
+
+        .file-size {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            margin-top: 0.25rem;
+        }
+
+        .typing-indicator {
+            color: #7f8c8d;
+            font-style: italic;
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .input-container {
+            background: white;
+            border-top: 1px solid #dee2e6;
+            padding: 1rem;
+        }
+
+        .file-upload-section {
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .file-button {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .file-button:hover {
+            background: #5a6268;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .selected-file {
+            display: flex;
+            align-items: center;
+            background: #e9ecef;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .upload-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .upload-button:hover {
+            background: #218838;
+        }
+
+        .message-form {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .message-form input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .message-form input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .message-form button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: transform 0.2s ease;
+        }
+
+        .message-form button:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        .message-form button:disabled {
+            background: #adb5bd;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 150px;
+            }
+            
+            .users-list {
+                display: flex;
+                gap: 1rem;
+                padding: 0.5rem 1rem;
+            }
+            
+            .user-item {
+                white-space: nowrap;
+            }
+            
+            .text-message, .file-message {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-container" id="loginContainer">
+        <div class="login-box">
+            <h1>🐍 Python Real-Time Chat</h1>
+            <form id="loginForm">
+                <input type="text" id="usernameInput" placeholder="Enter your username" maxlength="20" required>
+                <button type="submit">Join Chat</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Chat Interface -->
+    <div class="chat-container" id="chatContainer">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>Online Users (<span id="userCount">0</span>)</h3>
+            </div>
+            <div class="users-list" id="usersList"></div>
+        </div>
+
+        <div class="main-chat">
+            <div class="chat-header">
+                <h2>Python Chat Room</h2>
+                <div class="user-info">Welcome, <span id="currentUser"></span>!</div>
+            </div>
+
+            <div class="messages-container" id="messagesContainer">
+                <!-- Messages will appear here -->
+            </div>
+
+            <div class="input-container">
+                <div class="file-upload-section">
+                    <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.zip">
+                    <button class="file-button" onclick="document.getElementById('fileInput').click()">📎</button>
+                    <div id="selectedFileDiv" class="selected-file" style="display: none;">
+                        <span id="selectedFileName"></span>
+                        <button class="upload-button" onclick="uploadFile()">Send File</button>
+                    </div>
+                </div>
+
+                <form class="message-form" id="messageForm">
+                    <input type="text" id="messageInput" placeholder="Type a message..." maxlength="500" required>
+                    <button type="submit">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentUsername = '';
+        let typingTimer;
+        let isTyping = false;
+
+        // DOM elements
+        const loginContainer = document.getElementById('loginContainer');
+        const chatContainer = document.getElementById('chatContainer');
+        const loginForm = document.getElementById('loginForm');
+        const usernameInput = document.getElementById('usernameInput');
+        const currentUserSpan = document.getElementById('currentUser');
+        const usersList = document.getElementById('usersList');
+        const userCount = document.getElementById('userCount');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageInput');
+        const fileInput = document.getElementById('fileInput');
+        const selectedFileDiv = document.getElementById('selectedFileDiv');
+        const selectedFileName = document.getElementById('selectedFileName');
+
+        // Login form submission
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = usernameInput.value.trim();
+            if (username) {
+                currentUsername = username;
+                socket.emit('join_chat', { username: username });
+                currentUserSpan.textContent = username;
+                loginContainer.style.display = 'none';
+                chatContainer.style.display = 'flex';
+            }
+        });
+
+        // Message form submission
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = messageInput.value.trim();
+            if (message) {
+                socket.emit('send_message', { message: message });
+                messageInput.value = '';
+                stopTyping();
+            }
+        });
+
+        // Typing indicators
+        messageInput.addEventListener('input', () => {
+            if (!isTyping) {
+                isTyping = true;
+                socket.emit('typing');
+            }
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(stopTyping, 1000);
+        });
+
+        function stopTyping() {
+            if (isTyping) {
+                isTyping = false;
+                socket.emit('stop_typing');
+            }
+        }
+
+        // File handling
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedFileName.textContent = file.name;
+                selectedFileDiv.style.display = 'flex';
+            } else {
+                selectedFileDiv.style.display = 'none';
+            }
+        });
+
+        function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('username', currentUsername);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    fileInput.value = '';
+                    selectedFileDiv.style.display = 'none';
+                } else {
+                    alert('File upload failed: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('File upload failed');
+            });
+        }
+
+        // Socket event handlers
+        socket.on('chat_history', (messages) => {
+            messagesContainer.innerHTML = '';
+            messages.forEach(addMessage);
+            scrollToBottom();
+        });
+
+        socket.on('new_message', (message) => {
+            addMessage(message);
+            scrollToBottom();
+        });
+
+        socket.on('users_update', (users) => {
+            userCount.textContent = users.length;
+            usersList.innerHTML = '';
+            users.forEach(user => {
+                const userDiv = document.createElement('div');
+                userDiv.className = `user-item ${user === currentUsername ? 'current-user' : ''}`;
+                userDiv.innerHTML = `
+                    <span class="user-status"></span>
+                    ${user}
+                `;
+                usersList.appendChild(userDiv);
+            });
+        });
+
+        socket.on('user_joined', (data) => {
+            addSystemMessage(`${data.username} joined the chat`);
+        });
+
+        socket.on('user_left', (data) => {
+            addSystemMessage(`${data.username} left the chat`);
+        });
+
+        socket.on('user_typing', (data) => {
+            showTypingIndicator(data.username);
+        });
+
+        socket.on('user_stop_typing', (data) => {
+            hideTypingIndicator(data.username);
+        });
+
+        // Helper functions
+        function addMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+
+            if (message.type === 'text') {
+                messageDiv.innerHTML = `
+                    <div class="text-message">
+                        <div class="message-header">
+                            <span class="username">${message.username}</span>
+                            <span class="timestamp">${formatTime(message.timestamp)}</span>
+                        </div>
+                        <div class="message-text">${escapeHtml(message.text)}</div>
+                    </div>
+                `;
+            } else if (message.type === 'file') {
+                messageDiv.innerHTML = `
+                    <div class="file-message">
+                        <div class="message-header">
+                            <span class="username">${message.username}</span>
+                            <span class="timestamp">${formatTime(message.timestamp)}</span>
+                        </div>
+                        <div class="file-info">
+                            <div class="file-icon">📁</div>
+                            <div class="file-details">
+                                <a href="${message.file_url}" target="_blank" class="file-link">${message.filename}</a>
+                                <div class="file-size">${message.file_size}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            messagesContainer.appendChild(messageDiv);
+        }
+
+        function addSystemMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `<div class="system-message">${text}</div>`;
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function showTypingIndicator(username) {
+            hideTypingIndicator(username); // Remove existing indicator
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'typing-indicator';
+            typingDiv.id = `typing-${username}`;
+            typingDiv.textContent = `${username} is typing...`;
+            messagesContainer.appendChild(typingDiv);
+            scrollToBottom();
+        }
+
+        function hideTypingIndicator(username) {
+            const existing = document.getElementById(`typing-${username}`);
+            if (existing) {
+                existing.remove();
+            }
+        }
+
+        function formatTime(timestamp) {
+            return new Date(timestamp).toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    </script>
+</body>
+</html>
